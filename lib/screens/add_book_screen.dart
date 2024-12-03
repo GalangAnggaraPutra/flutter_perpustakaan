@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../models/book_model.dart';
@@ -15,84 +13,58 @@ class _AddBookScreenState extends State<AddBookScreen> {
   final _judulController = TextEditingController();
   final _pengarangController = TextEditingController();
   final _penerbitController = TextEditingController();
-  final _tahunController = TextEditingController();
-  final _stokController = TextEditingController();
-  File? _image;
+  final _tahunTerbitController = TextEditingController();
+  final _imageUrlController = TextEditingController();
   bool _isLoading = false;
 
-   Future<void> _pickImage() async {
-    try {
-      final ImagePicker picker = ImagePicker();
-      final XFile? pickedFile = await picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1800,
-        maxHeight: 1800,
-      );
-      
-      if (pickedFile != null) {
-        setState(() {
-          _image = File(pickedFile.path);
-        });
-      }
-    } catch (e) {
-      print('Error picking image: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal memilih gambar')),
-      );
-    }
+  @override
+  void dispose() {
+    _judulController.dispose();
+    _pengarangController.dispose();
+    _penerbitController.dispose();
+    _tahunTerbitController.dispose();
+    _imageUrlController.dispose();
+    super.dispose();
   }
+
   Future<void> _submitForm() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
     try {
-      String? imageName;
-      
-      // Upload image if selected
-      if (_image != null) {
-        final imageRequest = http.MultipartRequest(
-          'POST',
-          Uri.parse('http://localhost/flutter_perpustakaan/api/upload_image.php'),
-        );
-        
-        imageRequest.files.add(
-          await http.MultipartFile.fromPath('image', _image!.path),
-        );
-        
-        final imageResponse = await imageRequest.send();
-        final imageResponseData = await imageResponse.stream.bytesToString();
-        final imageData = json.decode(imageResponseData);
-        
-        if (imageData['status'] == 'success') {
-          imageName = imageData['image'];
-        }
-      }
-
-      // Add book data
       final response = await http.post(
         Uri.parse('http://localhost/flutter_perpustakaan/api/add_book.php'),
         body: {
-          'judul': _judulController.text,
-          'pengarang': _pengarangController.text,
-          'penerbit': _penerbitController.text,
-          'tahun_terbit': _tahunController.text,
-          'stok': _stokController.text,
-          'image': imageName ?? 'default_book.jpg',
+          'judul': _judulController.text.trim(),
+          'pengarang': _pengarangController.text.trim(),
+          'penerbit': _penerbitController.text.trim(),
+          'tahun_terbit': _tahunTerbitController.text.trim(),
+          'image': _imageUrlController.text.trim().isNotEmpty 
+              ? _imageUrlController.text.trim() 
+              : 'default_book.jpg',
         },
       );
 
-      final data = json.decode(response.body);
+      print('Status Code: ${response.statusCode}');
+      print('Response Headers: ${response.headers}');
+      print('Raw Response: ${response.body}');
 
-      if (data['status'] == 'success') {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Buku berhasil ditambahkan')),
-        );
-        Navigator.pop(context, true);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Buku berhasil ditambahkan')),
+          );
+          Navigator.pop(context, true);
+        } else {
+          throw Exception(data['message'] ?? 'Terjadi kesalahan');
+        }
       } else {
-        throw Exception(data['message']);
+        throw Exception('Gagal menambahkan buku');
       }
     } catch (e) {
+      print('Error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e')),
       );
@@ -106,7 +78,8 @@ class _AddBookScreenState extends State<AddBookScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Tambah Buku'),
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
       ),
       body: SingleChildScrollView(
         padding: EdgeInsets.all(16),
@@ -114,24 +87,6 @@ class _AddBookScreenState extends State<AddBookScreen> {
           key: _formKey,
           child: Column(
             children: [
-              // Image Picker
-              GestureDetector(
-                onTap: _pickImage,
-                child: Container(
-                  width: 150,
-                  height: 200,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[200],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: _image != null
-                      ? Image.file(_image!, fit: BoxFit.cover)
-                      : Icon(Icons.add_photo_alternate, size: 50),
-                ),
-              ),
-              SizedBox(height: 16),
-              
-              // Form Fields
               TextFormField(
                 controller: _judulController,
                 decoration: InputDecoration(
@@ -178,7 +133,7 @@ class _AddBookScreenState extends State<AddBookScreen> {
               SizedBox(height: 16),
               
               TextFormField(
-                controller: _tahunController,
+                controller: _tahunTerbitController,
                 decoration: InputDecoration(
                   labelText: 'Tahun Terbit',
                   border: OutlineInputBorder(),
@@ -195,27 +150,17 @@ class _AddBookScreenState extends State<AddBookScreen> {
                 },
               ),
               SizedBox(height: 16),
-              
+
               TextFormField(
-                controller: _stokController,
+                controller: _imageUrlController,
                 decoration: InputDecoration(
-                  labelText: 'Stok',
+                  labelText: 'URL Gambar',
                   border: OutlineInputBorder(),
+                  hintText: 'Masukkan URL gambar (opsional)',
                 ),
-                keyboardType: TextInputType.number,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Stok tidak boleh kosong';
-                  }
-                  if (int.tryParse(value) == null) {
-                    return 'Stok harus berupa angka';
-                  }
-                  return null;
-                },
               ),
               SizedBox(height: 24),
               
-              // Submit Button
               ElevatedButton(
                 onPressed: _isLoading ? null : _submitForm,
                 style: ElevatedButton.styleFrom(

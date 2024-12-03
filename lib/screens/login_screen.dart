@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'home_screen.dart'; // Tambahkan import ini
+import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -12,11 +12,17 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _obscurePassword = true; // Untuk toggle password visibility
 
   Future<void> _login() async {
-    setState(() {
-      _isLoading = true;
-    });
+    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Email dan password harus diisi')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
 
     try {
       final response = await http.post(
@@ -44,9 +50,7 @@ class _LoginScreenState extends State<LoginScreen> {
         SnackBar(content: Text('Terjadi kesalahan: $e')),
       );
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
 
@@ -60,78 +64,122 @@ class _LoginScreenState extends State<LoginScreen> {
             fit: BoxFit.cover,
           ),
         ),
-        child: Center(
-          child: Card(
-            margin: EdgeInsets.all(20),
-            child: Padding(
-              padding: EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Sistem Informasi Perpustakaan',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                  ),
-                  SizedBox(height: 20),
-                  TextField(
-                    controller: _emailController,
-                    decoration: InputDecoration(
-                      labelText: 'Email',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  SizedBox(height: 10),
-                  TextField(
-                    controller: _passwordController,
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      border: OutlineInputBorder(),
-                    ),
-                    obscureText: true,
-                  ),
-                  SizedBox(height: 20),
-                  ElevatedButton(
-                    onPressed: _isLoading ? null : _login,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black,
-                      minimumSize: Size(double.infinity, 50),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.symmetric(horizontal: 24.0),
+              child: Card(
+                elevation: 0,
+                color: Colors.white.withOpacity(0.9),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Padding(
+                  padding: EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Sistem Informasi Perpustakaan',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                    ),
-                    // Perbaikan child disini
-                    child: _isLoading 
-                        ? SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : Text(
-                            'Sign In',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                            ),
+                      SizedBox(height: 32),
+                      
+                      // Email field
+                      TextField(
+                        controller: _emailController,
+                        decoration: InputDecoration(
+                          hintText: 'Email',
+                          filled: true,
+                          fillColor: Colors.white,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide.none,
                           ),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: 16),
+                      
+                      // Password field
+                      TextField(
+                        controller: _passwordController,
+                        obscureText: _obscurePassword,
+                        decoration: InputDecoration(
+                          hintText: 'Enter password',
+                          filled: true,
+                          fillColor: Colors.white,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword 
+                                ? Icons.visibility_off 
+                                : Icons.visibility,
+                              color: Colors.grey,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _obscurePassword = !_obscurePassword;
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: 24),
+                      
+                      // Sign in button
+                      ElevatedButton(
+                        onPressed: _isLoading ? null : _login,
+                        child: _isLoading
+                            ? SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                            : Text('Sign In'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.black87,
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  SizedBox(height: 15),
-                  Text(
-                    'Ingin Mempunyai akun? Kontak admin',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 14,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+                ),
               ),
             ),
           ),
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 }

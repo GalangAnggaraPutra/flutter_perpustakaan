@@ -22,8 +22,14 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
     setState(() => _isLoading = true);
 
     try {
+      print('Sending request to add member...');
+      
       final response = await http.post(
         Uri.parse('http://localhost/flutter_perpustakaan/api/add_member.php'),
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'application/json',
+        },
         body: {
           'nim': _nimController.text,
           'nama': _namaController.text,
@@ -31,6 +37,9 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
           'jenis_kelamin': _jenisKelamin,
         },
       );
+
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
 
       final data = json.decode(response.body);
 
@@ -43,6 +52,7 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
         throw Exception(data['message']);
       }
     } catch (e) {
+      print('Error details: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e')),
       );
@@ -57,6 +67,7 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
       appBar: AppBar(
         title: Text('Tambah Anggota'),
         backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
       ),
       body: SingleChildScrollView(
         padding: EdgeInsets.all(16),
