@@ -1,6 +1,14 @@
 <?php
-header('Access-Control-Allow-Origin: *');
-header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: http://localhost:XXXX');
+header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Credentials: true');
+header('Access-Control-Allow-Headers: Origin, Content-Type, X-Auth-Token');
+
+if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
 
 include 'connection.php';
 
@@ -11,6 +19,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     // Debug: Cetak nilai yang diterima
     error_log("Email: " . $email);
     error_log("Password: " . $password);
+
+    // Tambahkan validasi input
+    if (empty($_POST['email']) || empty($_POST['password'])) {
+        echo json_encode([
+            'status' => 'error',
+            'message' => 'Email dan password harus diisi'
+        ]);
+        exit;
+    }
+
+    // Gunakan prepared statement
+    $stmt = $conn->prepare("SELECT * FROM users WHERE email = ?");
+    $stmt->bind_param("s", $email);
 
     // Query tanpa password untuk mengecek email
     $query = "SELECT * FROM users WHERE email='$email'";

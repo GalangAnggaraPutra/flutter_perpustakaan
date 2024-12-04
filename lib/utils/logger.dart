@@ -1,14 +1,13 @@
-import 'package:intl/intl.dart';
-
-class DateFormatter {
-  static String formatDate(String date) {
-    try {
-      if (date.isEmpty) return '-';
-      
-      final DateTime dateTime = DateTime.parse(date);
-      return DateFormat('dd MMMM yyyy', 'id_ID').format(dateTime);
-    } catch (e) {
-      return date;
-    }
+class Logger {
+  static void error(String message) {
+    print('ERROR: $message'); // In production, use proper logging
   }
-}
+
+  static void info(String message) {
+    print('INFO: $message');
+  }
+
+  static void debug(String message) {
+    print('DEBUG: $message');
+  }
+} 

@@ -7,14 +7,20 @@ $user = "root";
 $pass = "";
 $db   = "flutter_perpustakaan_1";
 
-$conn = new mysqli($host, $user, $pass, $db);
+try {
+    $conn = new mysqli($host, $user, $pass, $db);
+    
+    if ($conn->connect_error) {
+        throw new Exception("Connection failed: " . $conn->connect_error);
+    }
 
-if ($conn->connect_error) {
+    $conn->set_charset("utf8mb4");
+    
+} catch (Exception $e) {
+    error_log("Database connection error: " . $e->getMessage());
     die(json_encode([
         'status' => 'error',
-        'message' => 'Koneksi database gagal: ' . $conn->connect_error
+        'message' => 'Database connection failed: ' . $e->getMessage()
     ]));
 }
-
-$conn->set_charset("utf8mb4");
 ?>

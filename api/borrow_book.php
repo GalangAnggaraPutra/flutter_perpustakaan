@@ -14,19 +14,31 @@ include 'connection.php';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     try {
-        // Debug: Print received data
+        // Debug: Log received data
         error_log("Received POST data: " . print_r($_POST, true));
 
         // Validasi input
         if (!isset($_POST['buku_id']) || !isset($_POST['tanggal_pinjam']) || 
             !isset($_POST['tanggal_kembali']) || !isset($_POST['anggota_id'])) {
-            throw new Exception('Data tidak lengkap');
+            error_log("Missing required fields");
+            echo json_encode([
+                'status' => 'error',
+                'message' => 'Data tidak lengkap'
+            ]);
+            exit;
         }
 
         $buku_id = $_POST['buku_id'];
         $anggota_id = $_POST['anggota_id'];
         $tanggal_pinjam = $_POST['tanggal_pinjam'];
         $tanggal_kembali = $_POST['tanggal_kembali'];
+
+        // Debug: Log processed data
+        error_log("Processing borrow request with data:");
+        error_log("Book ID: $buku_id");
+        error_log("Member ID: $anggota_id");
+        error_log("Borrow Date: $tanggal_pinjam");
+        error_log("Return Date: $tanggal_kembali");
 
         // Check if book exists and is available
         $check_book = "SELECT id FROM buku WHERE id = ? AND NOT EXISTS (
@@ -51,6 +63,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $stmt->bind_param("iiss", $buku_id, $anggota_id, $tanggal_pinjam, $tanggal_kembali);
         
         if ($stmt->execute()) {
+            error_log("Peminjaman berhasil disimpan. ID: " . $conn->insert_id);
+            
+            // Update status buku (opsional, jika Anda menyimpan status di tabel buku)
+            $update_book = "UPDATE buku SET status = 'dipinjam' WHERE id = ?";
+            $stmt_update = $conn->prepare($update_book);
+            $stmt_update->bind_param("i", $buku_id);
+            $stmt_update->execute();
+            
             $response = [
                 'status' => 'success',
                 'message' => 'Buku berhasil dipinjam',
@@ -62,7 +82,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     'status' => 'dipinjam'
                 ]
             ];
+            error_log("Response: " . json_encode($response));
         } else {
+            error_log("Error executing query: " . $stmt->error);
             throw new Exception($stmt->error);
         }
 

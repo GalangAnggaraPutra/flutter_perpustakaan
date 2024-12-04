@@ -39,7 +39,8 @@ try {
     
     echo json_encode([
         'status' => 'success',
-        'data' => $members
+        'data' => $members,
+        'total' => count($members)
     ]);
 
 } catch (Exception $e) {

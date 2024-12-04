@@ -19,6 +19,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   List<Book> books = [];
+  int totalMembers = 0;
   int currentPage = 1;
   int totalPages = 1;
   int totalBooks = 0;
@@ -26,11 +27,14 @@ class _HomeScreenState extends State<HomeScreen> {
   final int booksPerPage = 3;
   String searchQuery = '';
   final ScrollController _scrollController = ScrollController();
+  final _tanggalPinjamController = TextEditingController();
+  final _tanggalKembaliController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     fetchBooks();
+    fetchMemberCount();
     _scrollController.addListener(_scrollListener);
   }
 
@@ -78,20 +82,23 @@ class _HomeScreenState extends State<HomeScreen> {
         throw Exception('Failed to load books');
       }
     } catch (e) {
-      setState(() {
-        isLoading = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: ${e.toString().replaceAll('Exception: ', '')}'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      setState(() => isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString().replaceAll('Exception: ', '')}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
   Future<void> _refreshBooks() async {
-    currentPage = 1;
+    setState(() {
+      currentPage = 1;
+      books.clear(); // Bersihkan daftar buku yang ada
+    });
     await fetchBooks();
   }
 
@@ -160,86 +167,130 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _pinjamBuku(int bookId) async {
-  try {
-    // Tampilkan dialog konfirmasi peminjaman
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Konfirmasi Peminjaman'),
-        content: Text('Apakah Anda yakin ingin meminjam buku ini?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Batal'),
+    try {
+      // Inisialisasi tanggal default
+      _tanggalPinjamController.text = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      _tanggalKembaliController.text = DateFormat('yyyy-MM-dd')
+          .format(DateTime.now().add(Duration(days: 7)));
+
+      // Tampilkan dialog pemilihan tanggal
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Konfirmasi Peminjaman'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _tanggalPinjamController,
+                decoration: InputDecoration(
+                  labelText: 'Tanggal Pinjam',
+                  suffixIcon: IconButton(
+                    icon: Icon(Icons.calendar_today),
+                    onPressed: () => _selectDate(context, true),
+                  ),
+                ),
+                readOnly: true,
+              ),
+              SizedBox(height: 16),
+              TextField(
+                controller: _tanggalKembaliController,
+                decoration: InputDecoration(
+                  labelText: 'Tanggal Kembali',
+                  suffixIcon: IconButton(
+                    icon: Icon(Icons.calendar_today),
+                    onPressed: () => _selectDate(context, false),
+                  ),
+                ),
+                readOnly: true,
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text('Pinjam'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text('Batal'),
             ),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-
-    // Tampilkan loading
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => Center(child: CircularProgressIndicator()),
-    );
-
-    final response = await http.post(
-      Uri.parse('http://localhost/flutter_perpustakaan/api/borrow_book.php'),
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: {
-        'buku_id': bookId.toString(),
-        'anggota_id': '1', // Ganti dengan ID anggota yang sedang login
-        'tanggal_pinjam': DateFormat('yyyy-MM-dd').format(DateTime.now()),
-        'tanggal_kembali': DateFormat('yyyy-MM-dd').format(
-          DateTime.now().add(Duration(days: 7))
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text('Pinjam'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+              ),
+            ),
+          ],
         ),
-      },
-    );
+      );
 
-    // Tutup loading dialog
-    Navigator.pop(context);
+      if (confirm != true) return;
 
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      if (data['status'] == 'success') {
+      // Tampilkan loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => Center(child: CircularProgressIndicator()),
+      );
+
+      // Lakukan peminjaman
+      final response = await http.post(
+        Uri.parse('http://localhost/flutter_perpustakaan/api/borrow_book.php'),
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: {
+          'buku_id': bookId.toString(),
+          'anggota_id': '1',
+          'tanggal_pinjam': _tanggalPinjamController.text,
+          'tanggal_kembali': _tanggalKembaliController.text,
+        },
+      );
+
+      // Tutup loading dialog
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success') {
+          // Tunggu sebentar sebelum refresh untuk memastikan database terupdate
+          await Future.delayed(Duration(milliseconds: 500));
+          
+          // Reset halaman dan refresh data
+          setState(() {
+            currentPage = 1;
+            books.clear();
+          });
+          
+          await fetchBooks();
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Buku berhasil dipinjam'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } else {
+          throw Exception(data['message'] ?? 'Gagal meminjam buku');
+        }
+      } else {
+        throw Exception('Gagal meminjam buku: ${response.statusCode}');
+      }
+    } catch (e) {
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Buku berhasil dipinjam'),
-            backgroundColor: Colors.green,
+            content: Text('Error: ${e.toString().replaceAll('Exception: ', '')}'),
+            backgroundColor: Colors.red,
           ),
         );
-        await _refreshBooks(); // Refresh daftar buku
-      } else {
-        throw Exception(data['message'] ?? 'Gagal meminjam buku');
       }
-    } else {
-      throw Exception('Gagal meminjam buku: ${response.statusCode}');
     }
-  } catch (e) {
-    // Pastikan dialog loading sudah ditutup
-    if (Navigator.canPop(context)) {
-      Navigator.pop(context);
-    }
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Error: ${e.toString().replaceAll('Exception: ', '')}'),
-        backgroundColor: Colors.red,
-      ),
-    );
   }
-}
 
   Future<void> _kembalikanBuku(int bookId) async {
     try {
@@ -315,6 +366,59 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> fetchMemberCount() async {
+    try {
+      final response = await http.get(
+        Uri.parse('http://localhost/flutter_perpustakaan/api/get_members.php'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success') {
+          setState(() {
+            totalMembers = (data['data'] as List).length;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error fetching member count: $e');
+    }
+  }
+
+  Future<void> _selectDate(BuildContext context, bool isPinjam) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(Duration(days: 30)),
+      locale: const Locale('id', 'ID'), // Untuk format tanggal Indonesia
+    );
+
+    if (picked != null) {
+      setState(() {
+        if (isPinjam) {
+          _tanggalPinjamController.text = DateFormat('yyyy-MM-dd').format(picked);
+          // Update tanggal kembali otomatis 7 hari setelah tanggal pinjam
+          _tanggalKembaliController.text = DateFormat('yyyy-MM-dd')
+              .format(picked.add(Duration(days: 7)));
+        } else {
+          // Validasi tanggal kembali tidak boleh kurang dari tanggal pinjam
+          final tanggalPinjam = DateTime.parse(_tanggalPinjamController.text);
+          if (picked.isBefore(tanggalPinjam)) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Tanggal kembali tidak boleh kurang dari tanggal pinjam'),
+                backgroundColor: Colors.red,
+              ),
+            );
+            return;
+          }
+          _tanggalKembaliController.text = DateFormat('yyyy-MM-dd').format(picked);
+        }
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -356,6 +460,49 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               
               SizedBox(height: 20),
+
+              // Tambahkan card statistik setelah header
+              Container(
+                margin: EdgeInsets.symmetric(vertical: 16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.people, color: Colors.blue),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Total Anggota',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              SizedBox(height: 8),
+                              Text(
+                                '$totalMembers',
+                                style: TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Bisa tambahkan statistik lain di sini
+                  ],
+                ),
+              ),
 
               // Search Bar
               TextField(
@@ -481,7 +628,7 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         },
         child: Icon(Icons.people),
-        backgroundColor: Colors.black,
+        backgroundColor: Colors.white,
       ),
     );
   }
@@ -625,29 +772,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           ),
                         ),
-                        SizedBox(width: 8),
-                        if (book.isDipinjam)
-                          ElevatedButton(
-                            onPressed: () => _kembalikanBuku(book.id),
-                            child: Text('Kembalikan'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.orange,
-                              foregroundColor: Colors.white,
-                              textStyle: TextStyle(fontSize: 12),
-                              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            ),
-                          )
-                        else
-                          ElevatedButton(
-                            onPressed: () => _pinjamBuku(book.id),
-                            child: Text('Pinjam'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
-                              foregroundColor: Colors.white,
-                              textStyle: TextStyle(fontSize: 12),
-                              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            ),
-                          ),
                       ],
                     ),
                   ],
@@ -663,6 +787,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _tanggalPinjamController.dispose();
+    _tanggalKembaliController.dispose();
     super.dispose();
   }
 }
