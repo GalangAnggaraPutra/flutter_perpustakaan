@@ -136,13 +136,35 @@ class _BorrowHistoryScreenState extends State<BorrowHistoryScreen> {
                         ),
                       ),
                       SizedBox(height: 8),
-                      Text('Peminjam: ${item['nama_peminjam'] ?? ''}'),
-                      Text('NIM: ${item['nim'] ?? ''}'),
-                      SizedBox(height: 8),
+                      if (widget.isAdmin) ...[
+                        Text('Peminjam: ${item['nama_peminjam'] ?? ''}'),
+                        Text('NIM: ${item['nim'] ?? ''}'),
+                        SizedBox(height: 8),
+                      ],
                       
-                      // Status keterlambatan
-                      if (item['terlambat'] > 0)
+                      // Status Peminjaman
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: item['status'] == 'dipinjam' ? Colors.blue[50] : Colors.green[50],
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: item['status'] == 'dipinjam' ? Colors.blue : Colors.green,
+                          ),
+                        ),
+                        child: Text(
+                          item['status_peminjaman'] ?? '',
+                          style: TextStyle(
+                            color: item['status'] == 'dipinjam' ? Colors.blue : Colors.green,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      
+                      // Status Keterlambatan jika ada
+                      if (item['status_keterlambatan'].toString().contains('terlambat'))
                         Container(
+                          margin: EdgeInsets.only(top: 4),
                           padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
                             color: Colors.red[50],
@@ -150,7 +172,7 @@ class _BorrowHistoryScreenState extends State<BorrowHistoryScreen> {
                             border: Border.all(color: Colors.red),
                           ),
                           child: Text(
-                            'Terlambat ${item['status_keterlambatan']}',
+                            item['status_keterlambatan'],
                             style: TextStyle(
                               color: Colors.red,
                               fontWeight: FontWeight.bold,
@@ -158,8 +180,8 @@ class _BorrowHistoryScreenState extends State<BorrowHistoryScreen> {
                           ),
                         ),
                       
-                      // Status denda
-                      if (item['denda'] > 0)
+                      // Status Denda jika ada
+                      if (item['status_denda'].toString() != 'Tidak ada denda')
                         Container(
                           margin: EdgeInsets.only(top: 4),
                           padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -169,7 +191,7 @@ class _BorrowHistoryScreenState extends State<BorrowHistoryScreen> {
                             border: Border.all(color: Colors.orange),
                           ),
                           child: Text(
-                            'Denda: ${item['status_denda']}',
+                            item['status_denda'],
                             style: TextStyle(
                               color: Colors.orange[800],
                               fontWeight: FontWeight.bold,
@@ -188,7 +210,8 @@ class _BorrowHistoryScreenState extends State<BorrowHistoryScreen> {
               children: [
                 _buildDateInfo('Tanggal Pinjam', item['tanggal_pinjam'] ?? ''),
                 _buildDateInfo('Batas Kembali', item['tanggal_kembali'] ?? ''),
-                _buildDateInfo('Dikembalikan', item['tanggal_dikembalikan'] ?? ''),
+                if (item['tanggal_dikembalikan'] != null)
+                  _buildDateInfo('Dikembalikan', item['tanggal_dikembalikan']),
               ],
             ),
           ],

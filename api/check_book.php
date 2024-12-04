@@ -11,7 +11,6 @@ try {
 
     $book_id = $_GET['book_id'];
     
-    // Perbaiki query untuk mengecek status buku
     $query = "SELECT 
                 CASE 
                     WHEN EXISTS (
@@ -19,7 +18,6 @@ try {
                         FROM peminjaman 
                         WHERE buku_id = ? 
                         AND status = 'dipinjam'
-                        AND deleted_at IS NULL
                     ) THEN 'dipinjam'
                     ELSE 'tersedia'
                 END as status,

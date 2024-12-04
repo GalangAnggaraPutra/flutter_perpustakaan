@@ -72,26 +72,27 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
       
       final response = await http.post(
         Uri.parse('http://localhost/flutter_perpustakaan/api/borrow_book.php'),
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: {
           'buku_id': _currentBook.id.toString(),
           'anggota_id': widget.anggotaId.toString(),
           'tanggal_pinjam': _tanggalPinjamController.text,
           'tanggal_kembali': _tanggalKembaliController.text,
         },
-      );
+      ).timeout(Duration(seconds: 10));
 
       _dismissLoadingDialog();
 
       final data = json.decode(response.body);
       if (data['status'] == 'success') {
-        await _updateBookStatus(); // Refresh status
+        await _updateBookStatus();
         _showSuccessMessage('Buku berhasil dipinjam');
-        Navigator.pop(context, _currentBook); // Kirim data terbaru ke halaman sebelumnya
+        Navigator.pop(context, _currentBook);
+      } else {
+        throw Exception(data['message']);
       }
     } catch (e) {
       _dismissLoadingDialog();
-      _showErrorSnackBar('Error: ${e.toString()}');
+      _showErrorSnackBar('Error: ${e.toString().replaceAll('Exception: ', '')}');
     }
   }
 
@@ -199,7 +200,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator()),
+      builder: (context) => Center(child: CircularProgressIndicator()),
     );
   }
 
