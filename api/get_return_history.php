@@ -5,10 +5,6 @@ header('Content-Type: application/json; charset=utf-8');
 include 'connection.php';
 
 try {
-    // Ambil anggota_id dari parameter URL
-    $anggota_id = isset($_GET['anggota_id']) ? (int)$_GET['anggota_id'] : 0;
-    
-    // Base query
     $query = "SELECT 
                 r.id,
                 r.tanggal_dikembalikan,
@@ -31,21 +27,14 @@ try {
               FROM pengembalian r
               JOIN peminjaman p ON r.peminjaman_id = p.id
               JOIN buku b ON r.buku_id = b.id
-              JOIN anggota a ON r.anggota_id = a.id";
-
-    // Jika bukan admin (anggota_id > 0), tambahkan filter
-    if ($anggota_id > 0) {
-        $query .= " WHERE r.anggota_id = ?";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param("i", $anggota_id);
-    } else {
-        $stmt = $conn->prepare($query);
-    }
-
-    $query .= " ORDER BY r.tanggal_dikembalikan DESC";
+              JOIN anggota a ON r.anggota_id = a.id
+              ORDER BY r.tanggal_dikembalikan DESC";
+              
+    $result = $conn->query($query);
     
-    $stmt->execute();
-    $result = $stmt->get_result();
+    if ($result === false) {
+        throw new Exception("Query error: " . $conn->error);
+    }
     
     $data = array();
     while ($row = $result->fetch_assoc()) {
@@ -79,4 +68,4 @@ try {
 }
 
 $conn->close();
-?>
+?> 

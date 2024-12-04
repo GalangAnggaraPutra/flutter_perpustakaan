@@ -16,13 +16,11 @@ try {
               CASE 
                 WHEN p.status = 'dipinjam' THEN 'dipinjam'
                 ELSE 'tersedia'
-              END as peminjaman_status
+              END as peminjaman_status,
+              p.tanggal_pinjam,
+              p.tanggal_kembali
               FROM buku b
-              LEFT JOIN (
-                SELECT buku_id, status 
-                FROM peminjaman 
-                WHERE status = 'dipinjam'
-              ) p ON b.id = p.buku_id
+              LEFT JOIN peminjaman p ON b.id = p.buku_id AND p.status = 'dipinjam'
               WHERE b.judul LIKE ?
               GROUP BY b.id
               ORDER BY b.id DESC
@@ -36,7 +34,17 @@ try {
     
     $books = array();
     while ($row = $result->fetch_assoc()) {
-        $books[] = $row;
+        $books[] = array(
+            'id' => (int)$row['id'],
+            'judul' => $row['judul'],
+            'pengarang' => $row['pengarang'],
+            'penerbit' => $row['penerbit'],
+            'tahun_terbit' => $row['tahun_terbit'],
+            'image' => $row['image'],
+            'isDipinjam' => $row['peminjaman_status'] === 'dipinjam',
+            'tanggal_pinjam' => $row['tanggal_pinjam'],
+            'tanggal_kembali' => $row['tanggal_kembali']
+        );
     }
     
     // Get total books for pagination

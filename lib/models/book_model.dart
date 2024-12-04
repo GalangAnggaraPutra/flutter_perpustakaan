@@ -5,9 +5,9 @@ class Book {
   final String penerbit;
   final String tahunTerbit;
   final String image;
-  bool isDipinjam;
-  String? tanggalPinjam;
-  String? tanggalKembali;
+  final bool isDipinjam;
+  final String? tanggalPinjam;
+  final String? tanggalKembali;
 
   Book({
     required this.id,
@@ -16,7 +16,7 @@ class Book {
     required this.penerbit,
     required this.tahunTerbit,
     required this.image,
-    this.isDipinjam = false,
+    required this.isDipinjam,
     this.tanggalPinjam,
     this.tanggalKembali,
   });
@@ -27,9 +27,9 @@ class Book {
       judul: json['judul'] ?? '',
       pengarang: json['pengarang'] ?? '',
       penerbit: json['penerbit'] ?? '',
-      tahunTerbit: json['tahun_terbit']?.toString() ?? '',
+      tahunTerbit: json['tahun_terbit'] ?? '',
       image: json['image'] ?? '',
-      isDipinjam: json['is_dipinjam'] == '1' || json['is_dipinjam'] == 1,
+      isDipinjam: json['peminjaman_status'] == 'dipinjam',
       tanggalPinjam: json['tanggal_pinjam'],
       tanggalKembali: json['tanggal_kembali'],
     );
@@ -43,7 +43,7 @@ class Book {
       'penerbit': penerbit,
       'tahun_terbit': tahunTerbit,
       'image': image,
-      'is_dipinjam': isDipinjam ? 1 : 0,
+      'isDipinjam': isDipinjam,
       'tanggal_pinjam': tanggalPinjam,
       'tanggal_kembali': tanggalKembali,
     };

@@ -1,14 +1,6 @@
 <?php
 header('Access-Control-Allow-Origin: *');
 header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Methods: GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
-
-// Handle preflight request
-if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
 
 include 'connection.php';
 
@@ -19,24 +11,35 @@ try {
 
     $book_id = $_GET['book_id'];
     
+    // Perbaiki query untuk mengecek status buku
     $query = "SELECT 
                 CASE 
-                    WHEN p.id IS NOT NULL AND p.status = 'dipinjam' 
-                    THEN 'dipinjam' 
-                    ELSE 'tersedia' 
-                END as status
-              FROM buku b
-              LEFT JOIN peminjaman p ON b.id = p.buku_id AND p.status = 'dipinjam'
-              WHERE b.id = ?";
+                    WHEN EXISTS (
+                        SELECT 1 
+                        FROM peminjaman 
+                        WHERE buku_id = ? 
+                        AND status = 'dipinjam'
+                        AND deleted_at IS NULL
+                    ) THEN 'dipinjam'
+                    ELSE 'tersedia'
+                END as status,
+                (SELECT tanggal_pinjam FROM peminjaman 
+                 WHERE buku_id = ? AND status = 'dipinjam' 
+                 ORDER BY id DESC LIMIT 1) as tanggal_pinjam,
+                (SELECT tanggal_kembali FROM peminjaman 
+                 WHERE buku_id = ? AND status = 'dipinjam' 
+                 ORDER BY id DESC LIMIT 1) as tanggal_kembali";
               
     $stmt = $conn->prepare($query);
-    $stmt->bind_param("i", $book_id);
+    $stmt->bind_param("iii", $book_id, $book_id, $book_id);
     $stmt->execute();
     $result = $stmt->get_result();
     
     if ($row = $result->fetch_assoc()) {
         echo json_encode([
-            'status' => $row['status']
+            'status' => $row['status'],
+            'tanggal_pinjam' => $row['tanggal_pinjam'],
+            'tanggal_kembali' => $row['tanggal_kembali']
         ]);
     } else {
         throw new Exception("Book not found");

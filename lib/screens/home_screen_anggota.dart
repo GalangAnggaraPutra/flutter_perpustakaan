@@ -10,7 +10,10 @@ class HomeScreenAnggota extends StatefulWidget {
   final int anggotaId;
   final String nama;
 
-  HomeScreenAnggota({required this.anggotaId, required this.nama});
+  HomeScreenAnggota({
+    required this.anggotaId,
+    required this.nama,
+  });
 
   @override
   _HomeScreenAnggotaState createState() => _HomeScreenAnggotaState();
@@ -41,10 +44,12 @@ class _HomeScreenAnggotaState extends State<HomeScreenAnggota> {
   }
 
   Future<void> fetchBooks({bool isLoadMore = false}) async {
+    if (!isLoadMore) setState(() => isLoading = true);
+
     try {
       final response = await http.get(
         Uri.parse(
-          '${Constants.getBooksUrl}?page=$currentPage&search=$searchQuery'
+          '${Constants.getBooksUrl}?page=$currentPage&per_page=10&search=$searchQuery'
         ),
       );
 
@@ -69,16 +74,18 @@ class _HomeScreenAnggotaState extends State<HomeScreenAnggota> {
     } catch (e) {
       print('Error: $e');
       setState(() => isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
     }
   }
 
   Future<void> _refreshBooks() async {
     setState(() {
       currentPage = 1;
-      searchQuery = '';
+      books.clear();
     });
     await fetchBooks();
   }
@@ -96,7 +103,10 @@ class _HomeScreenAnggotaState extends State<HomeScreenAnggota> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => BorrowHistoryScreen(),
+                  builder: (context) => BorrowHistoryScreen(
+                    anggotaId: widget.anggotaId,
+                    isAdmin: false,
+                  ),
                 ),
               );
             },
@@ -234,18 +244,20 @@ class _HomeScreenAnggotaState extends State<HomeScreenAnggota> {
                                     ),
                                   ),
                                 ),
-                                onTap: () {
-                                  Navigator.push(
+                                onTap: () async {
+                                  final updatedBook = await Navigator.push<Book>(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (context) =>
-                                          BookDetailScreen(book: book),
+                                      builder: (context) => BookDetailScreen(
+                                        book: book,
+                                        anggotaId: widget.anggotaId,
+                                      ),
                                     ),
-                                  ).then((value) {
-                                    if (value == true) {
-                                      _refreshBooks();
-                                    }
-                                  });
+                                  );
+                                  
+                                  if (updatedBook != null) {
+                                    await _refreshBooks();
+                                  }
                                 },
                               ),
                             );

@@ -18,20 +18,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         error_log("Received POST data: " . print_r($_POST, true));
 
         // Validasi input
-        if (!isset($_POST['buku_id']) || !isset($_POST['tanggal_pinjam']) || 
-            !isset($_POST['tanggal_kembali']) || !isset($_POST['anggota_id'])) {
-            error_log("Missing required fields");
-            echo json_encode([
-                'status' => 'error',
-                'message' => 'Data tidak lengkap'
-            ]);
-            exit;
+        if (!isset($_POST['buku_id']) || !isset($_POST['anggota_id']) || 
+            !isset($_POST['tanggal_pinjam']) || !isset($_POST['tanggal_kembali'])) {
+            throw new Exception('Data tidak lengkap');
         }
 
-        $buku_id = $_POST['buku_id'];
-        $anggota_id = $_POST['anggota_id'];
-        $tanggal_pinjam = $_POST['tanggal_pinjam'];
-        $tanggal_kembali = $_POST['tanggal_kembali'];
+        // Sanitasi input
+        $buku_id = (int)$_POST['buku_id'];
+        $anggota_id = (int)$_POST['anggota_id'];
+        $tanggal_pinjam = htmlspecialchars(trim($_POST['tanggal_pinjam']));
+        $tanggal_kembali = htmlspecialchars(trim($_POST['tanggal_kembali']));
 
         // Debug: Log processed data
         error_log("Processing borrow request with data:");
@@ -77,9 +73,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 'data' => [
                     'id' => $conn->insert_id,
                     'buku_id' => $buku_id,
+                    'anggota_id' => $anggota_id,
                     'tanggal_pinjam' => $tanggal_pinjam,
-                    'tanggal_kembali' => $tanggal_kembali,
-                    'status' => 'dipinjam'
+                    'tanggal_kembali' => $tanggal_kembali
                 ]
             ];
             error_log("Response: " . json_encode($response));

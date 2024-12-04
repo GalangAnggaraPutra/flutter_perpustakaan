@@ -13,24 +13,22 @@ include 'connection.php';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     try {
-        error_log("Received POST data: " . print_r($_POST, true));
-        
-        if (!isset($_POST['buku_id'])) {
-            throw new Exception('ID buku tidak ditemukan');
+        if (!isset($_POST['buku_id']) || !isset($_POST['anggota_id'])) {
+            throw new Exception('ID buku dan ID anggota diperlukan');
         }
 
-        // Nonaktifkan autocommit untuk transaksi
-        $conn->autocommit(FALSE);
-
         $buku_id = $_POST['buku_id'];
+        $anggota_id = $_POST['anggota_id'];
         
-        // Cek peminjaman aktif
+        // Cek peminjaman aktif untuk anggota tersebut
         $query = "SELECT p.id, p.tanggal_kembali 
                  FROM peminjaman p 
-                 WHERE p.buku_id = ? AND p.status = 'dipinjam'";
+                 WHERE p.buku_id = ? 
+                 AND p.anggota_id = ?
+                 AND p.status = 'dipinjam'";
         
         $stmt = $conn->prepare($query);
-        $stmt->bind_param("i", $buku_id);
+        $stmt->bind_param("ii", $buku_id, $anggota_id);
         $stmt->execute();
         $result = $stmt->get_result();
         
@@ -53,29 +51,52 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
         
         // Insert ke tabel pengembalian
-        $query = "INSERT INTO pengembalian (peminjaman_id, tanggal_dikembalikan, terlambat, denda) 
-                 VALUES (?, CURRENT_DATE, ?, ?)";
+        $query = "INSERT INTO pengembalian (
+                    peminjaman_id, 
+                    tanggal_dikembalikan, 
+                    terlambat, 
+                    denda,
+                    anggota_id,
+                    buku_id
+                 ) VALUES (?, CURRENT_DATE, ?, ?, ?, ?)";
+                 
         $stmt = $conn->prepare($query);
-        $stmt->bind_param("iid", $peminjaman_id, $terlambat, $denda);
+        $stmt->bind_param("iidii", 
+            $peminjaman_id, 
+            $terlambat, 
+            $denda,
+            $anggota_id,
+            $buku_id
+        );
         
         if (!$stmt->execute()) {
             throw new Exception('Gagal mencatat pengembalian');
         }
         
         // Update status peminjaman
-        $query = "UPDATE peminjaman SET status = 'dikembalikan' WHERE id = ?";
+        $query = "UPDATE peminjaman 
+                 SET status = 'dikembalikan', 
+                     updated_at = CURRENT_TIMESTAMP 
+                 WHERE buku_id = ? AND anggota_id = ? AND status = 'dipinjam'";
         $stmt = $conn->prepare($query);
-        $stmt->bind_param("i", $peminjaman_id);
+        $stmt->bind_param("ii", $buku_id, $anggota_id);
         
         if (!$stmt->execute()) {
             throw new Exception('Gagal mengupdate status peminjaman');
         }
         
-        // Commit transaksi
+        // Pastikan status buku diupdate
+        $update_book = "UPDATE buku 
+                       SET status = 'tersedia', 
+                           updated_at = CURRENT_TIMESTAMP 
+                       WHERE id = ?";
+        $stmt = $conn->prepare($update_book);
+        $stmt->bind_param("i", $buku_id);
+        $stmt->execute();
+        
         $conn->commit();
         
-        // Response sukses
-        $response = [
+        echo json_encode([
             'status' => 'success',
             'message' => 'Buku berhasil dikembalikan',
             'data' => [
@@ -84,26 +105,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 'terlambat' => $terlambat,
                 'denda' => $denda
             ]
-        ];
+        ]);
 
     } catch (Exception $e) {
-        // Rollback jika terjadi error
         $conn->rollback();
-        $response = [
+        echo json_encode([
             'status' => 'error',
             'message' => $e->getMessage()
-        ];
-    } finally {
-        // Aktifkan kembali autocommit
-        $conn->autocommit(TRUE);
+        ]);
     }
-
-    error_log("Response: " . json_encode($response));
-    echo json_encode($response);
-    
-    if (isset($stmt)) {
-        $stmt->close();
-    }
-    $conn->close();
 }
+
+$conn->close();
 ?>

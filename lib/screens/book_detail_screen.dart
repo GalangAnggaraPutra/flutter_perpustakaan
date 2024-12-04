@@ -10,8 +10,13 @@ import '../utils/logger.dart'; // Assume we've created a custom logger
 
 class BookDetailScreen extends StatefulWidget {
   final Book book;
-  
-  const BookDetailScreen({Key? key, required this.book}) : super(key: key);
+  final int anggotaId;
+
+  const BookDetailScreen({
+    Key? key, 
+    required this.book,
+    required this.anggotaId,
+  }) : super(key: key);
 
   @override
   _BookDetailScreenState createState() => _BookDetailScreenState();
@@ -33,173 +38,107 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   void initState() {
     super.initState();
     _currentBook = widget.book;
-    _initializeBookDetails();
+    _updateBookStatus();
   }
 
-  // Consolidated initialization method
-  void _initializeBookDetails() {
-    _initializeDates();
-    _loadBookStatus();
-  }
-
-  void _initializeDates() {
-    final now = DateTime.now();
-    _tanggalPinjamController.text = DateFormat('yyyy-MM-dd').format(now);
-    _tanggalKembaliController.text = DateFormat('yyyy-MM-dd')
-        .format(now.add(const Duration(days: 7)));
-  }
-
-  // Improved error handling for network requests
-  Future<dynamic> _safeApiCall(Future<http.Response> Function() apiCall) async {
-    for (int attempt = 0; attempt < _maxRetries; attempt++) {
-      try {
-        final response = await apiCall().timeout(_timeoutDuration);
-        
-        if (response.statusCode == 200) {
-          return json.decode(response.body);
-        }
-        
-        // Log non-200 responses
-        Logger.error('API call failed with status code: ${response.statusCode}');
-        throw Exception('Server error');
-      } on TimeoutException {
-        _showErrorSnackBar('Koneksi timeout. Silakan coba lagi.');
-        if (attempt == _maxRetries - 1) rethrow;
-      } on http.ClientException catch (e) {
-        Logger.error('Network error: $e');
-        _showErrorSnackBar('Kesalahan jaringan. Silakan periksa koneksi.');
-        if (attempt == _maxRetries - 1) rethrow;
-      } catch (e) {
-        Logger.error('Unexpected error: $e');
-        _showErrorSnackBar('Terjadi kesalahan tidak terduga');
-        if (attempt == _maxRetries - 1) rethrow;
-      }
-      
-      // Wait before retrying
-      await Future.delayed(const Duration(seconds: 2));
-    }
-  }
-
-  Future<void> _loadBookStatus() async {
-    if (_isLoading) return;
-    
-    setState(() => _isLoading = true);
-    
+  // Tambahkan fungsi untuk update status
+  Future<void> _updateBookStatus() async {
     try {
-      final data = await _safeApiCall(() => http.get(
-        Uri.parse('$_baseUrl/check_book.php?book_id=${widget.book.id}')
-      ));
+      final response = await http.get(
+        Uri.parse('http://localhost/flutter_perpustakaan/api/check_book.php?book_id=${_currentBook.id}'),
+      );
 
-      setState(() {
-        _currentBook = _currentBook.copyWith(
-          isDipinjam: data['status'] == 'dipinjam'
-        );
-      });
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (mounted) {
+          setState(() {
+            _currentBook = _currentBook.copyWith(
+              isDipinjam: data['status'] == 'dipinjam',
+              tanggalPinjam: data['tanggal_pinjam'],
+              tanggalKembali: data['tanggal_kembali'],
+            );
+          });
+        }
+      }
     } catch (e) {
-      Logger.error('Error loading book status: $e');
-    } finally {
-      setState(() => _isLoading = false);
+      print('Error updating book status: $e');
     }
   }
 
+  // Fungsi untuk peminjaman buku
   Future<void> _pinjamBuku() async {
     try {
-      if (!mounted) return;
-
       _showLoadingDialog();
-
-      final data = await _safeApiCall(() => http.post(
-        Uri.parse('$_baseUrl/borrow_book.php'),
+      
+      final response = await http.post(
+        Uri.parse('http://localhost/flutter_perpustakaan/api/borrow_book.php'),
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: {
           'buku_id': _currentBook.id.toString(),
-          'anggota_id': '1',
+          'anggota_id': widget.anggotaId.toString(),
           'tanggal_pinjam': _tanggalPinjamController.text,
           'tanggal_kembali': _tanggalKembaliController.text,
         },
-      ));
+      );
 
       _dismissLoadingDialog();
 
+      final data = json.decode(response.body);
       if (data['status'] == 'success') {
-        _updateBookAfterBorrowing();
+        await _updateBookStatus(); // Refresh status
         _showSuccessMessage('Buku berhasil dipinjam');
-      } else {
-        _showErrorSnackBar('Gagal meminjam buku: ${data['message']}');
+        Navigator.pop(context, _currentBook); // Kirim data terbaru ke halaman sebelumnya
       }
     } catch (e) {
       _dismissLoadingDialog();
       _showErrorSnackBar('Error: ${e.toString()}');
-      Logger.error('Error in _pinjamBuku: $e');
     }
   }
 
+  // Fungsi untuk pengembalian buku
   Future<void> _kembalikanBuku() async {
-    if (!mounted) return;
-
     try {
-      _showLoadingDialog();
-
-      final data = await _safeApiCall(() => http.post(
-        Uri.parse('$_baseUrl/return_book.php'),
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      final response = await http.post(
+        Uri.parse('http://localhost/flutter_perpustakaan/api/return_book.php'),
         body: {
           'buku_id': _currentBook.id.toString(),
+          'anggota_id': widget.anggotaId.toString(),
         },
-      ));
+      );
 
-      _dismissLoadingDialog();
-
+      final data = json.decode(response.body);
       if (data['status'] == 'success') {
-        _handleSuccessfulReturn(data);
-      } else {
-        _showErrorSnackBar('Gagal mengembalikan buku: ${data['message']}');
+        // Tampilkan informasi denda jika ada
+        if (data['data'] != null && data['data']['denda'] > 0) {
+          await showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Text('Informasi Pengembalian'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Keterlambatan: ${data['data']['terlambat']} hari'),
+                  Text('Denda: Rp ${data['data']['denda']}'),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('OK'),
+                ),
+              ],
+            ),
+          );
+        }
+
+        await _updateBookStatus();
+        _showSuccessMessage('Buku berhasil dikembalikan');
+        Navigator.pop(context, _currentBook);
       }
     } catch (e) {
-      _dismissLoadingDialog();
       _showErrorSnackBar('Error: ${e.toString()}');
-      Logger.error('Error in _kembalikanBuku: $e');
     }
-  }
-
-  void _handleSuccessfulReturn(Map<String, dynamic> data) {
-    setState(() {
-      _currentBook = _currentBook.copyWith(
-        isDipinjam: false,
-        tanggalPinjam: null,
-        tanggalKembali: null,
-      );
-    });
-
-    if (data['data'] != null && data['data']['denda'] > 0) {
-      _showFineDialog(data['data']);
-    } else {
-      _showSuccessMessage('Buku berhasil dikembalikan');
-    }
-  }
-
-  Future<void> _showFineDialog(Map<String, dynamic> fineData) async {
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Informasi Pengembalian'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Keterlambatan: ${fineData['terlambat']} hari'),
-            Text('Denda: Rp ${fineData['denda']}'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
   }
 
   void _showPinjamDialog() {
@@ -292,16 +231,6 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     }
   }
 
-  void _updateBookAfterBorrowing() {
-    setState(() {
-      _currentBook = _currentBook.copyWith(
-        isDipinjam: true,
-        tanggalPinjam: _tanggalPinjamController.text,
-        tanggalKembali: _tanggalKembaliController.text,
-      );
-    });
-  }
-
   Future<void> _selectDate(BuildContext context, bool isPinjam) async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -328,7 +257,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Detail Buku'),
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.black,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
@@ -406,53 +335,100 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          _currentBook.judul,
-          style: const TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-          ),
-          textAlign: TextAlign.center,
+          'Judul: ${_currentBook.judul}',
+          style: TextStyle(fontSize: 16),
         ),
-        const SizedBox(height: 8),
-        _buildDetailRow('Pengarang', _currentBook.pengarang),
-        _buildDetailRow('Penerbit', _currentBook.penerbit),
-        _buildDetailRow('Tahun Terbit', _currentBook.tahunTerbit),
+        SizedBox(height: 8),
+        Text(
+          'Pengarang: ${_currentBook.pengarang}',
+          style: TextStyle(fontSize: 16),
+        ),
+        Text(
+          'Penerbit: ${_currentBook.penerbit}',
+          style: TextStyle(fontSize: 16),
+        ),
+        Text(
+          'Tahun Terbit: ${_currentBook.tahunTerbit}',
+          style: TextStyle(fontSize: 16),
+        ),
+        SizedBox(height: 16),
+        
+        // Tambahkan informasi tanggal pinjam dan kembali
         if (_currentBook.isDipinjam) ...[
-          _buildDetailRow(
-            'Tanggal Pinjam',
-            DateFormatter.formatDate(_currentBook.tanggalPinjam ?? ''),
-          ),
-          _buildDetailRow(
-            'Tanggal Kembali',
-            DateFormatter.formatDate(_currentBook.tanggalKembali ?? ''),
+          Container(
+            padding: EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey[300]!),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Informasi Peminjaman:',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Tanggal Pinjam:',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 14,
+                            ),
+                          ),
+                          Text(
+                            _currentBook.tanggalPinjam != null
+                                ? DateFormatter.formatDate(_currentBook.tanggalPinjam!)
+                                : '-',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w500,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(width: 24),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Tanggal Kembali:',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 14,
+                            ),
+                          ),
+                          Text(
+                            _currentBook.tanggalKembali != null
+                                ? DateFormatter.formatDate(_currentBook.tanggalKembali!)
+                                : '-',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w500,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ],
-    );
-  }
-
-  Widget _buildDetailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[600],
-              ),
-            ),
-          ),
-          const Text(': '),
-          Expanded(
-            child: Text(value),
-          ),
-        ],
-      ),
     );
   }
 

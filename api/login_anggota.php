@@ -29,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 'status' => 'success',
                 'message' => 'Login berhasil',
                 'data' => [
-                    'id' => $anggota['id'],
+                    'id' => (int)$anggota['id'],
                     'nim' => $anggota['nim'],
                     'nama' => $anggota['nama']
                 ]

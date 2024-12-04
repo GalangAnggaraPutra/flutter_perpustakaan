@@ -11,6 +11,7 @@ import 'edit_book_screen.dart';
 import '../utils/date_formatter.dart';
 import '../utils/constants.dart';
 import 'member_list_screen.dart';
+import 'dart:async';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -29,6 +30,8 @@ class _HomeScreenState extends State<HomeScreen> {
   final ScrollController _scrollController = ScrollController();
   final _tanggalPinjamController = TextEditingController();
   final _tanggalKembaliController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
+  Timer? _debounce;
 
   @override
   void initState() {
@@ -36,6 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
     fetchBooks();
     fetchMemberCount();
     _scrollController.addListener(_scrollListener);
+    _searchController.addListener(_onSearchChanged);
   }
 
   void _scrollListener() {
@@ -47,13 +51,24 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _onSearchChanged() {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      setState(() {
+        currentPage = 1;
+        books.clear();
+      });
+      fetchBooks();
+    });
+  }
+
   Future<void> fetchBooks({bool isLoadMore = false}) async {
     if (!isLoadMore) setState(() => isLoading = true);
 
     try {
       final response = await http.get(
         Uri.parse(
-          'http://localhost/flutter_perpustakaan/api/get_book.php?page=$currentPage&per_page=$booksPerPage&search=$searchQuery'
+          'http://localhost/flutter_perpustakaan/api/get_book.php?page=$currentPage&per_page=$booksPerPage&search=${_searchController.text}'
         ),
       ).timeout(Duration(seconds: 10));
 
@@ -294,12 +309,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _kembalikanBuku(int bookId) async {
     try {
+      // Tampilkan loading dialog
       showDialog(
         context: context,
         barrierDismissible: false,
         builder: (context) => Center(child: CircularProgressIndicator()),
       );
 
+      // Kirim request ke API pengembalian
       final response = await http.post(
         Uri.parse('http://localhost/flutter_perpustakaan/api/return_book.php'),
         headers: {
@@ -307,7 +324,7 @@ class _HomeScreenState extends State<HomeScreen> {
         },
         body: {
           'buku_id': bookId.toString(),
-          'anggota_id': '1', // Ganti dengan ID anggota yang sedang login
+          'anggota_id': '1', // ID anggota yang mengembalikan
         },
       );
 
@@ -316,6 +333,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success') {
+          // Jika ada denda, tampilkan dialog informasi denda
           if (data['data'] != null && data['data']['denda'] > 0) {
             await showDialog(
               context: context,
@@ -333,7 +351,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   TextButton(
                     onPressed: () {
                       Navigator.pop(context);
-                      _refreshBooks();
+                      _refreshBooks(); // Refresh daftar buku
                     },
                     child: Text('OK'),
                   ),
@@ -341,25 +359,22 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             );
           } else {
+            // Jika tidak ada denda
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('Buku berhasil dikembalikan'),
                 backgroundColor: Colors.green,
               ),
             );
-            await _refreshBooks();
+            await _refreshBooks(); // Refresh daftar buku
           }
-        } else {
-          throw Exception(data['message'] ?? 'Gagal mengembalikan buku');
         }
-      } else {
-        throw Exception('Gagal mengembalikan buku: ${response.statusCode}');
       }
     } catch (e) {
       Navigator.pop(context); // Tutup dialog loading jika error
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error: ${e.toString().replaceAll('Exception: ', '')}'),
+          content: Text('Error: ${e.toString()}'),
           backgroundColor: Colors.red,
         ),
       );
@@ -506,13 +521,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
               // Search Bar
               TextField(
-                onChanged: (value) {
-                  searchQuery = value;
-                  currentPage = 1;
-                  fetchBooks();
-                },
+                controller: _searchController,
                 decoration: InputDecoration(
-                  hintText: 'Search',
+                  hintText: 'Cari buku...',
                   prefixIcon: Icon(Icons.search),
                   filled: true,
                   fillColor: Colors.white,
@@ -520,6 +531,19 @@ class _HomeScreenState extends State<HomeScreen> {
                     borderRadius: BorderRadius.circular(30),
                     borderSide: BorderSide.none,
                   ),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: Icon(Icons.clear),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() {
+                              currentPage = 1;
+                              books.clear();
+                            });
+                            fetchBooks();
+                          },
+                        )
+                      : null,
                 ),
               ),
               
@@ -573,7 +597,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => BorrowHistoryScreen(),
+                            builder: (context) => BorrowHistoryScreen(
+                              anggotaId: 1,
+                              isAdmin: true,
+                            ),
                           ),
                         );
                       },
@@ -628,7 +655,7 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         },
         child: Icon(Icons.people),
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.black,
       ),
     );
   }
@@ -642,7 +669,10 @@ class _HomeScreenState extends State<HomeScreen> {
           final updatedBook = await Navigator.push<Book>(
             context,
             MaterialPageRoute(
-              builder: (context) => BookDetailScreen(book: book),
+              builder: (context) => BookDetailScreen(
+                book: book,
+                anggotaId: 1,
+              ),
             ),
           );
           
@@ -653,6 +683,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 books[index] = updatedBook;
               }
             });
+            _refreshBooks();
           }
         },
         child: Padding(
@@ -754,16 +785,27 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         SizedBox(width: 8),
                         ElevatedButton(
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => BookDetailScreen(book: book),
-                            ),
-                          ).then((value) {
-                            if (value == true) {
+                          onPressed: () async {
+                            final updatedBook = await Navigator.push<Book>(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => BookDetailScreen(
+                                  book: book,
+                                  anggotaId: 1,
+                                ),
+                              ),
+                            );
+                            
+                            if (updatedBook != null) {
+                              setState(() {
+                                final index = books.indexWhere((b) => b.id == updatedBook.id);
+                                if (index != -1) {
+                                  books[index] = updatedBook;
+                                }
+                              });
                               _refreshBooks();
                             }
-                          }),
+                          },
                           child: Text('Detail'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.black,
@@ -786,6 +828,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _searchController.dispose();
+    _debounce?.cancel();
     _scrollController.dispose();
     _tanggalPinjamController.dispose();
     _tanggalKembaliController.dispose();
